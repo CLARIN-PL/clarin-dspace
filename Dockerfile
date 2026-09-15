@@ -60,7 +60,7 @@ ENV DSPACE_INSTALL=/dspace
 COPY --from=ant_build /dspace $DSPACE_INSTALL
 # Need host command for "[dspace]/bin/make-handle-config"
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends host \
+    && apt-get install -y --no-install-recommends ca-certificates curl host \
     && apt-get purge -y --auto-remove \
     && rm -rf /var/lib/apt/lists/*
 # Expose Tomcat port (8080) and AJP port (8009) and Handle Server HTTP port (8000)
@@ -69,6 +69,7 @@ EXPOSE 8080 8009 8000
 ENV JAVA_OPTS=-Xmx2000m
 COPY scripts/restart_debug/* /usr/local/tomcat/bin
 COPY scripts/index-scripts/* /dspace/bin
+COPY docker/production/entrypoint.sh /usr/local/bin/dspace-production-entrypoint
 # Link the DSpace 'server' webapp into Tomcat's webapps directory.
 # This ensures that when we start Tomcat, it runs from /server path (e.g. http://localhost:8080/server/)
 RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
@@ -79,7 +80,7 @@ RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
 #    ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/ROOT
 
 WORKDIR /usr/local/tomcat/bin
-RUN chmod u+x redebug.sh undebug.sh custom_run.sh
+RUN chmod u+x redebug.sh undebug.sh custom_run.sh /usr/local/bin/dspace-production-entrypoint
 
 # We create a 'dspace' user to run DSpace instead of running as root. An explicit UID is required 
 # because Kubernetes deployment accepts only numeric user IDs when specifying the container user.
