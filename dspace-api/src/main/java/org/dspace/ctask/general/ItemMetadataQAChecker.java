@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -25,14 +26,15 @@ import org.dspace.app.util.DCInput;
 import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
-import org.dspace.content.Collection;
-import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.curate.AbstractCurationTask;
 import org.dspace.curate.Curator;
 import org.dspace.discovery.IsoLangCodes;
+import org.dspace.versioning.VersionHistory;
+import org.dspace.versioning.factory.VersionServiceFactory;
+import org.dspace.versioning.service.VersionHistoryService;
 
 /**
  * Check basic properties of item metadata for quality assurance.
@@ -43,6 +45,7 @@ import org.dspace.discovery.IsoLangCodes;
 public class ItemMetadataQAChecker extends AbstractCurationTask {
 
     public static final int CURATE_WARNING = -1000;
+    private static final Logger log = LogManager.getLogger(ItemMetadataQAChecker.class);
 
     /** Expected types. */
     private Set<String> dcTypeValuesSet;
@@ -53,7 +56,11 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private String handlePrefix;
     private Map<String, Integer> complexInputs;
 
-    private static final Logger log = LogManager.getLogger(ItemMetadataQAChecker.class);
+    private String[] nonRepeatableMetadata;
+    private String[] strangeMetadata;
+    private String[] highlyRecommended;
+
+    private VersionHistoryService versionHistoryService;
 
     @Override
     public void init(Curator curator, String taskId) throws IOException {
@@ -72,8 +79,28 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                 "corpus", "lexicalConceptualResource", "languageDescription", "toolService"));
         }
 
+        nonRepeatableMetadata = configurationService.getArrayProperty("lr.curation.metadata.nonrepeatable",
+                new String[]{
+                    "local.branding",
+                    "dc.type",
+                    "dc.date.accessioned",
+                    "dc.rights.label",
+                    "dc.date.available",
+                    "dc.source.uri",
+                    "dc.identifier.doi",
+                    "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
+                });
+        strangeMetadata = configurationService.getArrayProperty("lr.curation.metadata.strange", new String[]{
+            "dc.description.uri",
+        });
+        highlyRecommended = configurationService.getArrayProperty("lr.curation.metadata.recommended", new String[]{
+            "dc.subject",
+        });
+
         complexInputs = new HashMap<>();
         loadComplexInputs();
+
+        versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
     }
 
     private void loadComplexInputs() {
@@ -132,11 +159,10 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                         validateDcType(item, results);
                         validateTitle(item, results);
                         validateDcLanguageIso(item, results);
-                        validateRelation(item, results);
+                        validateRelations(item, results);
                         validateEmptyMetadata(item, metadataValues, results);
-                        validateDuplicateMetadata(item, results);
+                        validatePredefinedNonRepeatableMetadata(item, results);
                         validateStrangeMetadata(item, results);
-                        validateBrandingConsistency(item, results);
                         validateRightsLabels(item, results);
                         itemWithFilesHasLicense(item);
                         validateHighlyRecommendedMetadata(item, results);
@@ -228,6 +254,11 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
      */
     private void validateDcLanguageIso(Item item, StringBuilder results) throws CurateException {
         List<MetadataValue> dcsLanguageIso = itemService.getMetadataByMetadataString(item, "dc.language.iso");
+
+        // build maps of expected and actual language names keyed by place
+        Map<Integer, String> expectedLangNamesByPlace = new HashMap<>();
+        Map<Integer, String> isoCodesByPlace = new HashMap<>();
+
         if (dcsLanguageIso != null && !dcsLanguageIso.isEmpty()) {
             // Validate dc.language.iso codes
             for (MetadataValue langCodeDC : dcsLanguageIso) {
@@ -240,6 +271,11 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                         String.format("Invalid language code - %s", langCode),
                         Curator.CURATE_FAIL);
                 }
+
+                Integer place = langCodeDC.getPlace();
+                String expectedLangName = IsoLangCodes.getLangForCode(langCode);
+                expectedLangNamesByPlace.put(place, expectedLangName);
+                isoCodesByPlace.put(place, langCode);
             }
 
             // Validate local.language.name matches dc.language.iso
@@ -251,15 +287,33 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                     Curator.CURATE_FAIL);
             }
 
-            // Validate that each language name corresponds to its ISO code
-            for (int i = 0; i < dcsLanguageIso.size(); i++) {
-                String expectedLangName = IsoLangCodes.getLangForCode(dcsLanguageIso.get(i).getValue());
-                String actualLangName = languageNames.get(i).getValue();
+            Map<Integer, String> actualLangNamesByPlace = new HashMap<>();
+            for (MetadataValue languageName : languageNames) {
+                Integer place = languageName.getPlace();
+                String actualLangName = languageName.getValue();
+                actualLangNamesByPlace.put(place, actualLangName);
+            }
+
+            // Ensure that the sets of places match between ISO codes and language names
+            Set<Integer> expectedPlaces = expectedLangNamesByPlace.keySet();
+            Set<Integer> actualPlaces = actualLangNamesByPlace.keySet();
+            if (!expectedPlaces.equals(actualPlaces)) {
+                throw new CurateException(
+                        String.format("local.language.name places %s do not match dc.language.iso places %s",
+                                actualPlaces, expectedPlaces),
+                        Curator.CURATE_FAIL);
+            }
+            // Validate that each language name corresponds to its ISO code for each place
+            for (Integer place : expectedPlaces) {
+                String expectedLangName = expectedLangNamesByPlace.get(place);
+                String actualLangName = actualLangNamesByPlace.get(place);
                 if (!expectedLangName.equals(actualLangName)) {
                     throw new CurateException(
-                        String.format("local.language.name [%s] does not match expected name [%s] for ISO code [%s]",
-                            actualLangName, expectedLangName, dcsLanguageIso.get(i).getValue()),
-                        Curator.CURATE_FAIL);
+                            String.format(
+                                    "local.language.name [%s] at place [%d] does not match expected name [%s] " +
+                                            "for ISO code [%s]",
+                                    actualLangName, place, expectedLangName, isoCodesByPlace.get(place)),
+                            Curator.CURATE_FAIL);
                 }
             }
         }
@@ -282,59 +336,141 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     //
-    // relation checker
+    // relation checker (based on assumption items are not part of multiple version histories)
     //
 
-    private void validateRelation(Item item, StringBuilder results) throws CurateException {
+    private void validateRelations(Item item, StringBuilder results) throws CurateException {
         String handlePrefixLocal = configurationService.getProperty("handle.canonical.prefix");
         try {
-            for (String[] twoWayRelation : new String[][]{
-                new String[]{
-                    "dc.relation.isreplacedby",
-                    "dc.relation.replaces"
-                },
-            }) {
-                String lhsRelation = twoWayRelation[0];
-                String rhsRelation = twoWayRelation[1];
+            String mdIsReplacedBy = "dc.relation.isreplacedby";
+            String mdReplaces = "dc.relation.replaces";
 
-                List<MetadataValue> dcsReplaced = itemService.getMetadataByMetadataString(item, lhsRelation);
-                if (dcsReplaced.isEmpty()) {
-                    return;
-                }
+            List<MetadataValue> dcsIsReplacedBy = getNonBlankMetadata(item, mdIsReplacedBy);
+            List<MetadataValue> dcsReplaces = getNonBlankMetadata(item, mdReplaces);
 
-                int status = Curator.CURATE_FAIL;
-                for (MetadataValue dc : dcsReplaced) {
-                    String handle = dc.getValue().replaceAll(handlePrefixLocal, "");
-                    DSpaceObject dsoMentioned = dereference(Curator.curationContext(), handle);
-                    if (dsoMentioned instanceof Item) {
-                        Item itemMentioned = (Item) dsoMentioned;
-                        List<MetadataValue> dcsMentioned =
-                            itemService.getMetadataByMetadataString(itemMentioned, rhsRelation);
-                        for (MetadataValue dcMentioned : dcsMentioned) {
-                            String handleMentioned = dcMentioned.getValue().replaceAll(handlePrefixLocal, "");
-                            // compare the handles
-                            if (handleMentioned.equals(item.getHandle())) {
-                                status = Curator.CURATE_SUCCESS;
-                                results.append(String.format("Item [%s] meets relation requirements", getHandle(item)));
-                                break;
-                            }
-                        }
-                    }
-                }
+            if (dcsIsReplacedBy.isEmpty() && dcsReplaces.isEmpty()) {
+                // item contains no relation metadata, nothing to check
+                return;
+            }
 
-                // indicate fail
-                if (status != Curator.CURATE_SUCCESS) {
-                    throw new CurateException(
-                        String.format("contains %s but the referenced object " +
-                            "does not contain %s or does not point to the item itself!\n",
-                            lhsRelation, rhsRelation),
-                        status);
+            // check if objects referenced by "dc.relation.isreplacedby" exist,
+            // and reference back to this item with "dc.relation.replaces" metadata
+            if (!dcsIsReplacedBy.isEmpty()) {
+                boolean relationsOK =
+                        checkRelations(item, dcsIsReplacedBy, mdIsReplacedBy, mdReplaces, handlePrefixLocal);
+                if (!relationsOK) {
+                    throw relationMetadataException(mdIsReplacedBy, mdReplaces);
                 }
             }
+            // check if objects referenced by "dc.relation.replaces" exist,
+            // and reference forward to this item with "dc.relation.isreplacedby" metadata
+            if (!dcsReplaces.isEmpty()) {
+                boolean relationsOK = checkRelations(item, dcsReplaces, mdReplaces, mdIsReplacedBy, handlePrefixLocal);
+                if (!relationsOK) {
+                    throw relationMetadataException(mdReplaces, mdIsReplacedBy);
+                }
+            }
+
+            // everything is OK
+            results.append(String.format("Item [%s] meets relation requirements. ", getHandle(item)));
 
         } catch (SQLException | IOException e) {
             throw new CurateException(e.getMessage(), Curator.CURATE_FAIL);
         }
+    }
+
+    private List<MetadataValue> getNonBlankMetadata(Item item, String metadataString) {
+        return itemService.getMetadataByMetadataString(item, metadataString)
+                .stream()
+                .filter(metadataValue -> !StringUtils.isBlank(metadataValue.getValue()))
+                .collect(Collectors.toList());
+    }
+
+    private boolean checkRelations(Item item,
+                                   List<MetadataValue> references,
+                                   String referencesFieldName,
+                                   String fieldNameInOtherDirection,
+                                   String handlePrefixLocal) throws SQLException, IOException, CurateException {
+        for (MetadataValue ref : references) {
+            Item referencedItem = getReferencedItem(ref, handlePrefixLocal);
+            boolean checksPass = hasReferenceBack(referencedItem, item.getHandle(),
+                    fieldNameInOtherDirection, handlePrefixLocal) &&
+                    checkVersionHistory(item, referencedItem, referencesFieldName);
+            if (!checksPass) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Item getReferencedItem(MetadataValue relatedReference, String handlePrefixLocal)
+            throws SQLException, IOException, CurateException {
+        String referencedItemHandle =  getHandle(relatedReference, handlePrefixLocal);
+        DSpaceObject referencedObject = dereference(Curator.curationContext(), referencedItemHandle);
+        if (referencedObject instanceof Item) {
+            return (Item) referencedObject;
+        } else {
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced object [[%s]] is not an item or doesn't exist",
+                            relatedReference.getMetadataField().toString('.'), referencedItemHandle),
+                    Curator.CURATE_FAIL);
+        }
+    }
+
+    private boolean hasReferenceBack(Item referencedItem, String handleBack, String fieldNameInOtherDirection,
+                                     String handlePrefixLocal) throws CurateException {
+        boolean ok = itemService.getMetadataByMetadataString(referencedItem, fieldNameInOtherDirection).stream()
+                .map(mdv -> getHandle(mdv, handlePrefixLocal))
+                .anyMatch(handle -> handle != null && handle.equals(handleBack));
+        if (!ok) {
+            throw new CurateException(String.format("the referenced item %s does not refer back via %s",
+                           addMagicString(getHandle(referencedItem)), fieldNameInOtherDirection), Curator.CURATE_FAIL);
+        }
+        return true;
+    }
+
+    private String getHandle(MetadataValue relationReference, String handlePrefixLocal) {
+        String handle = relationReference.getValue();
+        if (StringUtils.isNotBlank(handlePrefixLocal) && handle != null && handle.startsWith(handlePrefixLocal)) {
+            handle = handle.substring(handlePrefixLocal.length());
+        }
+        return handle;
+    }
+
+    private boolean checkVersionHistory(Item item1, Item item2, String relation) throws SQLException, CurateException {
+        VersionHistory item1History = versionHistoryService.findByItem(Curator.curationContext(), item1);
+        if (item1History == null) {
+            throw new CurateException(
+                    String.format("contains '%s' but it's not part of any version history", relation),
+                    Curator.CURATE_FAIL
+            );
+        }
+        VersionHistory item2History = versionHistoryService.findByItem(Curator.curationContext(), item2);
+        if (item2History == null) {
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced item %s is not part of any version history",
+                            relation, addMagicString(getHandle(item2))),
+                    Curator.CURATE_FAIL
+            );
+        }
+
+        if (!item1History.equals(item2History)) {
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced item %s is not in the same version history",
+                            relation, addMagicString(getHandle(item2))),
+                    Curator.CURATE_FAIL
+            );
+        }
+        return true;
+    }
+
+    private static CurateException relationMetadataException(String leftRel, String rightRel) {
+        return new CurateException(
+                String.format("contains '%s' but the referenced object doesn't exist or " +
+                                "doesn't contain '%s' or doesn't point to this item",
+                        leftRel, rightRel),
+                Curator.CURATE_FAIL
+        );
     }
 
     private void validateEmptyMetadata(Item item, List<MetadataValue> metadataValues, StringBuilder results)
@@ -355,51 +491,14 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         }
     }
 
-    private void validateDuplicateMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String noDuplicate : new String[]{
-            "local.branding",
-            "dc.type",
-            "dc.date.accessioned",
-            "dc.rights.label",
-            "dc.date.available",
-            "dc.source.uri",
-            "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
-        }) {
+    private void validatePredefinedNonRepeatableMetadata(Item item, StringBuilder results) throws CurateException {
+        for (String noDuplicate : nonRepeatableMetadata) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, noDuplicate);
             if (null != vals && vals.size() > 1) {
                 throw new CurateException(
                     String.format("value [%s] is present multiple times", noDuplicate),
                     Curator.CURATE_FAIL);
             }
-        }
-    }
-
-    private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
-        try {
-            Collection owningCollection = item.getOwningCollection();
-            if (owningCollection != null) {
-                List<Community> communities = owningCollection.getCommunities();
-                if (communities != null && !communities.isEmpty()) {
-                    String cName = communities.get(0).getName();
-                    List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
-                    if (1 != brandings.size()) {
-                        throw new CurateException(
-                            String.format("local.branding present [%d] count", brandings.size()),
-                            Curator.CURATE_FAIL);
-                    }
-                    if (!cName.equals(brandings.get(0).getValue())) {
-                        throw new CurateException(
-                            String.format("local.branding [%s] does not match community [%s]",
-                                brandings.get(0).getValue(), cName),
-                            Curator.CURATE_FAIL);
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            throw new CurateException(
-                String.format("has invalid community [%s]", e.getMessage()),
-                Curator.CURATE_FAIL);
-
         }
     }
 
@@ -427,9 +526,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private void validateHighlyRecommendedMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String md : new String[]{
-            "dc.subject",
-        }) {
+        for (String md : highlyRecommended) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
             if (null == vals || vals.isEmpty()) {
                 throw new CurateException(
@@ -440,9 +537,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private void validateStrangeMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String md : new String[]{
-            "dc.description.uri",
-        }) {
+        for (String md : strangeMetadata) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
             if (null != vals && !vals.isEmpty()) {
                 throw new CurateException(
