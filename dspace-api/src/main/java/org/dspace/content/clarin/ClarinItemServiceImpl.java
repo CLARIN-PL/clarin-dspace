@@ -31,6 +31,7 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -53,6 +54,9 @@ public class ClarinItemServiceImpl implements ClarinItemService {
 
     @Autowired
     ItemService itemService;
+
+    @Autowired
+    ConfigurationService configurationService;
 
     @Override
     public List<Item> findByBitstreamUUID(Context context, UUID bitstreamUUID) throws SQLException {
@@ -142,7 +146,7 @@ public class ClarinItemServiceImpl implements ClarinItemService {
     @Override
     public void updateItemFilesMetadata(Context context, Item item) throws SQLException {
         List<Bundle> originalBundles = itemService.getBundles(item, Constants.CONTENT_BUNDLE_NAME);
-        if (Objects.nonNull(originalBundles.get(0))) {
+        if (CollectionUtils.isNotEmpty(originalBundles) && Objects.nonNull(originalBundles.get(0))) {
             updateItemFilesMetadata(context, item, originalBundles.get(0));
         } else {
             log.error("Cannot update item files metadata because the ORIGINAL bundle is null.");
@@ -151,6 +155,14 @@ public class ClarinItemServiceImpl implements ClarinItemService {
 
     @Override
     public void updateItemFilesMetadata(Context context, Item item, Bundle bundle) throws SQLException {
+        // A DSpace 5 migration can attach tens of thousands of existing files.
+        // Recalculating all file totals after every attachment is quadratic.
+        // The migration profile defers this work and runs
+        // ItemFilesMetadataRepair once before rebuilding the indexes.
+        if (configurationService.getBooleanProperty("clarin.item-files-metadata.deferred", false)) {
+            return;
+        }
+
         if (!Objects.equals(bundle.getName(), Constants.CONTENT_BUNDLE_NAME)) {
             return;
         }
@@ -171,6 +183,11 @@ public class ClarinItemServiceImpl implements ClarinItemService {
                 hasFiles = true;
             }
             for (Bitstream bit : orig.getBitstreams()) {
+                if (Objects.isNull(bit)) {
+                    log.warn("Skipping an empty bitstream position while updating file metadata for item {}",
+                            item.getID());
+                    continue;
+                }
                 totalNumberOfFiles ++;
                 totalSizeofFiles += bit.getSizeBytes();
             }

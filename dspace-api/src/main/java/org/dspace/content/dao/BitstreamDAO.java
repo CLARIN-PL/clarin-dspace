@@ -10,6 +10,7 @@ package org.dspace.content.dao;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
@@ -52,4 +53,20 @@ public interface BitstreamDAO extends DSpaceObjectLegacySupportDAO<Bitstream> {
     int countWithNoPolicy(Context context) throws SQLException;
 
     List<Bitstream> getNotReferencedBitstreams(Context context) throws SQLException;
+
+    /**
+     * Attach an already-created bitstream during a controlled legacy migration
+     * without materializing the bundle's complete ordered bitstream collection.
+     *
+     * @param context current DSpace context
+     * @param bitstreamId bitstream UUID
+     * @param bundleId bundle UUID
+     * @param bitstreamOrder compact target bundle order
+     * @param legacyBitstreamOrder original source bundle order
+     * @param primary whether this is the bundle's primary bitstream
+     * @throws SQLException if the native relationship update fails
+     */
+    void addToBundleForMigration(Context context, UUID bitstreamId, UUID bundleId,
+                                 int bitstreamOrder, int legacyBitstreamOrder,
+                                 boolean primary) throws SQLException;
 }

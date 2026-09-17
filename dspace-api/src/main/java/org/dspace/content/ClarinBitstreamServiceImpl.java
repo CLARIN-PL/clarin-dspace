@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -116,6 +117,20 @@ public class ClarinBitstreamServiceImpl implements ClarinBitstreamService {
         }
         bitstreamService.update(context, bitstream);
         return true;
+    }
+
+    @Override
+    public void addToBundleForMigration(Context context, Bitstream bitstream, UUID bundleId,
+                                        int bitstreamOrder, int legacyBitstreamOrder,
+                                        boolean primary)
+            throws SQLException, AuthorizeException {
+        if (!authorizeService.isAdmin(context)) {
+            throw new AuthorizeException(
+                    "You must be an admin to attach a migrated bitstream");
+        }
+        bitstreamDAO.addToBundleForMigration(
+                context, bitstream.getID(), bundleId, bitstreamOrder,
+                legacyBitstreamOrder, primary);
     }
 
     /**

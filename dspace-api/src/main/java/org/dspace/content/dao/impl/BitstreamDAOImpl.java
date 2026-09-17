@@ -175,6 +175,34 @@ public class BitstreamDAOImpl extends AbstractHibernateDSODAO<Bitstream> impleme
     }
 
     @Override
+    public void addToBundleForMigration(Context context, UUID bitstreamId, UUID bundleId,
+                                        int bitstreamOrder, int legacyBitstreamOrder,
+                                        boolean primary) throws SQLException {
+        // Flush the newly persisted Bitstream before the native FK insert. This
+        // migration-only path avoids loading the complete ordered collection for
+        // every file, which is quadratic for legacy bundles containing thousands
+        // of bitstreams.
+        getHibernateSession(context).flush();
+        Query insert = getHibernateSession(context).createNativeQuery(
+                "INSERT INTO bundle2bitstream " +
+                "(bundle_id, bitstream_id, bitstream_order, bitstream_order_legacy) " +
+                "VALUES (:bundleId, :bitstreamId, :bitstreamOrder, :legacyBitstreamOrder)");
+        insert.setParameter("bundleId", bundleId);
+        insert.setParameter("bitstreamId", bitstreamId);
+        insert.setParameter("bitstreamOrder", bitstreamOrder);
+        insert.setParameter("legacyBitstreamOrder", legacyBitstreamOrder);
+        insert.executeUpdate();
+
+        if (primary) {
+            Query updatePrimary = getHibernateSession(context).createNativeQuery(
+                    "UPDATE bundle SET primary_bitstream_id = :bitstreamId WHERE uuid = :bundleId");
+            updatePrimary.setParameter("bundleId", bundleId);
+            updatePrimary.setParameter("bitstreamId", bitstreamId);
+            updatePrimary.executeUpdate();
+        }
+    }
+
+    @Override
     public Iterator<Bitstream> findAll(Context context, int limit, int offset) throws SQLException {
         Map<String, Object> map = new HashMap<>();
         return findByX(context, Bitstream.class, map, true, limit, offset).iterator();

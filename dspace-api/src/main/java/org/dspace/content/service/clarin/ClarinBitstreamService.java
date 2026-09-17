@@ -9,6 +9,7 @@ package org.dspace.content.service.clarin;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.UUID;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
@@ -52,4 +53,23 @@ public interface ClarinBitstreamService {
      */
     public boolean validation(Context context, Bitstream bitstream)
             throws IOException, SQLException, AuthorizeException ;
+
+    /**
+     * Attach an imported bitstream using a compact target order while retaining
+     * the source bundle order for audit. This method is
+     * intended only for the controlled migration endpoint.
+     *
+     * @param context current DSpace context
+     * @param bitstream imported bitstream
+     * @param bundleId target bundle UUID
+     * @param bitstreamOrder compact target bundle order
+     * @param legacyBitstreamOrder original source bundle order
+     * @param primary whether this is the bundle's primary bitstream
+     * @throws SQLException if the relationship cannot be stored
+     * @throws AuthorizeException if the current user is not an administrator
+     */
+    void addToBundleForMigration(Context context, Bitstream bitstream, UUID bundleId,
+                                 int bitstreamOrder, int legacyBitstreamOrder,
+                                 boolean primary)
+            throws SQLException, AuthorizeException;
 }

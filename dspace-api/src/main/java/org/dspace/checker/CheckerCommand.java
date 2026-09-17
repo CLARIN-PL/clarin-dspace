@@ -42,6 +42,8 @@ import org.dspace.storage.bitstore.factory.StorageServiceFactory;
  * TODO check for any existing resource problems
  */
 public final class CheckerCommand {
+    private static final int COMMIT_BATCH_SIZE = 100;
+
     /**
      * Usual Log4J logger.
      */
@@ -124,6 +126,7 @@ public final class CheckerCommand {
         checksumService.updateMissingBitstreams(context);
 
         Bitstream bitstream = dispatcher.next();
+        int processed = 0;
 
         while (bitstream != null) {
             LOG.debug("Processing bitstream id = " + bitstream.getID());
@@ -135,6 +138,13 @@ public final class CheckerCommand {
             }
 
             context.uncacheEntity(bitstream);
+            processed++;
+            if (processed % COMMIT_BATCH_SIZE == 0) {
+                // Keep the Hibernate persistence context bounded during full-repository
+                // audits. Without periodic commits, every dispatcher/result lookup
+                // auto-flushes all previously processed checksum and history entities.
+                context.commit();
+            }
             bitstream = dispatcher.next();
         }
     }

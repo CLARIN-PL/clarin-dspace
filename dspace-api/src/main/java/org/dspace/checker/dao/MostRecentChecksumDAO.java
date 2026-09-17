@@ -27,6 +27,15 @@ import org.dspace.core.GenericDAO;
  */
 public interface MostRecentChecksumDAO extends GenericDAO<MostRecentChecksum> {
 
+    /**
+     * Create checksum registry rows for bitstreams which do not have one yet.
+     *
+     * @param context current DSpace context
+     * @return number of rows created
+     * @throws SQLException if the bulk insert fails
+     */
+    int createMissing(Context context) throws SQLException;
+
     public List<MostRecentChecksum> findByNotProcessedInDateRange(Context context, Date startDate, Date endDate)
         throws SQLException;
 

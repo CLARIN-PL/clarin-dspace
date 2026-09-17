@@ -44,6 +44,25 @@ public class MostRecentChecksumDAOImpl extends AbstractHibernateDAO<MostRecentCh
         super();
     }
 
+    @Override
+    public int createMissing(Context context) throws SQLException {
+        Query insert = getHibernateSession(context).createNativeQuery(
+                "INSERT INTO most_recent_checksum (" +
+                "bitstream_id, to_be_processed, expected_checksum, current_checksum, " +
+                "last_process_start_date, last_process_end_date, checksum_algorithm, " +
+                "matched_prev_checksum, result) " +
+                "SELECT bitstream.uuid, NOT bitstream.deleted, " +
+                "COALESCE(bitstream.checksum, ''), COALESCE(bitstream.checksum, ''), " +
+                "TIMESTAMP '1970-01-01 00:00:00', TIMESTAMP '1970-01-01 00:00:00', " +
+                "COALESCE(bitstream.checksum_algorithm, 'MD5'), TRUE, " +
+                "CASE WHEN bitstream.deleted THEN 'BITSTREAM_MARKED_DELETED' " +
+                "ELSE 'CHECKSUM_MATCH' END " +
+                "FROM bitstream " +
+                "WHERE NOT EXISTS (SELECT 1 FROM most_recent_checksum recent " +
+                "WHERE recent.bitstream_id = bitstream.uuid)");
+        return insert.executeUpdate();
+    }
+
 
     @Override
     public List<MostRecentChecksum> findByNotProcessedInDateRange(Context context, Date startDate, Date endDate)
