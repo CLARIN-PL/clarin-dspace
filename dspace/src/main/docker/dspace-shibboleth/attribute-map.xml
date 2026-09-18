@@ -73,4 +73,15 @@
     <Attribute name="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" id="persistent-id">
         <AttributeDecoder xsi:type="NameIDAttributeDecoder" formatter="$NameQualifier!$SPNameQualifier!$Name" defaultQualifiers="true"/>
     </Attribute>
+    <!-- CLARIN SPF attributes retained from the legacy CLARIN-PL SP. -->
+    <Attribute name="urn:mace:dir:attribute-def:eduPersonAffiliation" id="unscoped-affiliation"/>
+    <Attribute name="urn:oid:1.3.6.1.4.1.5923.1.1.1.1" id="unscoped-affiliation"/>
+    <Attribute name="urn:mace:dir:attribute-def:mail" id="mail"/>
+    <Attribute name="urn:mace:dir:attribute-def:cn" id="cn"/>
+    <Attribute name="urn:mace:dir:attribute-def:sn" id="sn"/>
+    <Attribute name="urn:mace:dir:attribute-def:givenName" id="givenName"/>
+    <Attribute name="urn:mace:dir:attribute-def:o" id="o"/>
+    <Attribute name="urn:oid:2.5.4.3" id="cn"/>
+    <Attribute name="urn:oid:2.5.4.10" id="o"/>
+
 </Attributes>
