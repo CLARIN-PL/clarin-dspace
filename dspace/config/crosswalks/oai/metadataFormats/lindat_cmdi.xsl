@@ -24,8 +24,17 @@
     <xsl:variable name="dc_identifier_uri"
     select="fn:stringReplace(/doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']/doc:element[@name='uri']/doc:element/doc:field[@name='value'])"/>
     <xsl:variable name="modifyDate" select="/doc:metadata/doc:element[@name='others']/doc:field[@name='lastModifyDate']/text()"/>
+    <xsl:variable name="accessionDate"
+        select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='accessioned']/doc:element/doc:field[@name='value'][1]"/>
+    <xsl:variable name="availableDate"
+        select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='available']/doc:element/doc:field[@name='value'][1]"/>
+    <xsl:variable name="issuedDate"
+        select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='issued']/doc:element/doc:field[@name='value'][1]"/>
+    <xsl:variable name="wordCount"
+        select="/doc:metadata/doc:element[@name='local']/doc:element[@name='size']/doc:element[@name='info']/doc:element/doc:field[@name='value'][contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), ';words')][1]"/>
     <xsl:variable name="dc_rights_uri" select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='rights']/doc:element[@name='uri']/doc:element/doc:field[@name='value']" />
     <xsl:variable name="serverURL" select="fn:getProperty('dspace.server.url')"/>
+    <xsl:variable name="cmdiSelfLink" select="concat($serverURL, '/cmdi/oai-metadata?metadataPrefix=cmdi&amp;handle=', $handle)"/>
     <xsl:variable name="newProfile" select="'clarin.eu:cr1:p_1403526079380'"/>
     <xsl:variable name="oldProfile" select="'clarin.eu:cr1:p_1349361150622'"/>
     
@@ -33,12 +42,81 @@
         <xsl:variable name="uploaded_md" select="fn:getUploadedMetadata($handle)"/>
         <xsl:choose>
             <xsl:when test="$uploaded_md != ''">
-                <xsl:copy-of select="$uploaded_md"/>
+                <!--
+                    Historical records may contain an xs:dateTime (or a textual Java date)
+                    in MdCreationDate and stale MdSelfLink values. Normalise their CMDI
+                    envelope at dissemination time without modifying the archived bitstream.
+                -->
+                <xsl:apply-templates select="$uploaded_md/*" mode="normalise-uploaded-cmdi"/>
             </xsl:when>
             <xsl:otherwise>
                 <xsl:call-template name="ConstructCMDI"/>
             </xsl:otherwise>
         </xsl:choose>
+    </xsl:template>
+
+    <xsl:template match="@*|node()" mode="normalise-uploaded-cmdi">
+        <xsl:copy>
+            <xsl:apply-templates select="@*|node()" mode="normalise-uploaded-cmdi"/>
+        </xsl:copy>
+    </xsl:template>
+
+    <!-- Return an xs:date value without assuming a database-specific Date#toString representation. -->
+    <xsl:template name="CmdiCreationDate">
+        <xsl:choose>
+            <xsl:when test="substring(normalize-space($modifyDate), 5, 1) = '-' and substring(normalize-space($modifyDate), 8, 1) = '-'">
+                <xsl:value-of select="substring(normalize-space($modifyDate), 1, 10)"/>
+            </xsl:when>
+            <xsl:when test="substring(normalize-space($accessionDate), 5, 1) = '-' and substring(normalize-space($accessionDate), 8, 1) = '-'">
+                <xsl:value-of select="substring(normalize-space($accessionDate), 1, 10)"/>
+            </xsl:when>
+            <xsl:when test="substring(normalize-space($availableDate), 5, 1) = '-' and substring(normalize-space($availableDate), 8, 1) = '-'">
+                <xsl:value-of select="substring(normalize-space($availableDate), 1, 10)"/>
+            </xsl:when>
+            <xsl:when test="substring(normalize-space($issuedDate), 5, 1) = '-' and substring(normalize-space($issuedDate), 8, 1) = '-'">
+                <xsl:value-of select="substring(normalize-space($issuedDate), 1, 10)"/>
+            </xsl:when>
+        </xsl:choose>
+    </xsl:template>
+
+    <!-- Keep the schema-defined Header order and add the optional fields when old CMDI omitted them. -->
+    <xsl:template match="*[local-name()='Header']" mode="normalise-uploaded-cmdi">
+        <xsl:variable name="creationDate">
+            <xsl:choose>
+                <xsl:when test="*[local-name()='MdCreationDate'][substring(normalize-space(.), 5, 1) = '-' and substring(normalize-space(.), 8, 1) = '-']">
+                    <xsl:value-of select="substring(normalize-space(*[local-name()='MdCreationDate'][1]), 1, 10)"/>
+                </xsl:when>
+                <xsl:otherwise>
+                    <xsl:call-template name="CmdiCreationDate"/>
+                </xsl:otherwise>
+            </xsl:choose>
+        </xsl:variable>
+        <xsl:copy>
+            <xsl:apply-templates select="@*" mode="normalise-uploaded-cmdi"/>
+            <xsl:apply-templates select="*[local-name()='MdCreator']" mode="normalise-uploaded-cmdi"/>
+            <xsl:if test="string-length(normalize-space($creationDate)) = 10">
+                <cmd:MdCreationDate><xsl:value-of select="$creationDate"/></cmd:MdCreationDate>
+            </xsl:if>
+            <cmd:MdSelfLink><xsl:value-of select="$cmdiSelfLink"/></cmd:MdSelfLink>
+            <xsl:apply-templates
+                select="*[not(local-name()='MdCreator' or local-name()='MdCreationDate' or local-name()='MdSelfLink')]"
+                mode="normalise-uploaded-cmdi"/>
+        </xsl:copy>
+    </xsl:template>
+
+    <!--
+        Repair empty legacy word counts only when an audited value exists in
+        local.size.info (for example "62592;words"). Otherwise omit the invalid
+        empty decimal instead of inventing a value.
+    -->
+    <xsl:template match="*[local-name()='NumberOfWords'][not(normalize-space())]"
+                  mode="normalise-uploaded-cmdi">
+        <xsl:if test="$wordCount">
+            <xsl:copy>
+                <xsl:apply-templates select="@*" mode="normalise-uploaded-cmdi"/>
+                <xsl:value-of select="substring-before(concat(normalize-space($wordCount), ';'), ';')"/>
+            </xsl:copy>
+        </xsl:if>
     </xsl:template>
     
     <xsl:template name="ConstructCMDI">
@@ -56,7 +134,7 @@
         </xsl:variable>
         <cmd:CMD CMDVersion="1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         	<xsl:attribute name="xsi:schemaLocation">
-        		<xsl:value-of select="concat('http://www.clarin.eu/cmd/ http://catalog.clarin.eu/ds/ComponentRegistry/rest/registry/profiles/',$profile,'/xsd')"/>
+                <xsl:value-of select="concat('http://www.clarin.eu/cmd/ https://catalog.clarin.eu/ds/ComponentRegistry/rest/registry/1.1/profiles/',$profile,'/xsd')"/>
         	</xsl:attribute>
             <xsl:call-template name="AdministrativeMD">
             	<xsl:with-param name="profile" select="$profile"/>
@@ -82,9 +160,12 @@
     
     <xsl:template name="Header">
     	<xsl:param name="profile"/>
+        <xsl:variable name="creationDate"><xsl:call-template name="CmdiCreationDate"/></xsl:variable>
         <cmd:Header>
-            <cmd:MdCreationDate><xsl:value-of select="$modifyDate"/></cmd:MdCreationDate>
-            <cmd:MdSelfLink><xsl:value-of select="$dc_identifier_uri"/>@format=cmdi</cmd:MdSelfLink>
+            <xsl:if test="string-length(normalize-space($creationDate)) = 10">
+                <cmd:MdCreationDate><xsl:value-of select="$creationDate"/></cmd:MdCreationDate>
+            </xsl:if>
+            <cmd:MdSelfLink><xsl:value-of select="$cmdiSelfLink"/></cmd:MdSelfLink>
             <cmd:MdProfile><xsl:value-of select="$profile"/></cmd:MdProfile>
             <cmd:MdCollectionDisplayName><xsl:value-of select="/doc:metadata/doc:element[@name='others']/doc:field[@name='owningCollection']/text()"/></cmd:MdCollectionDisplayName>
         </cmd:Header>

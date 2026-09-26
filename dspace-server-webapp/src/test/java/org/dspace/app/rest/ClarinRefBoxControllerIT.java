@@ -8,9 +8,7 @@
 package org.dspace.app.rest;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,7 +42,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 /**
  * The Integration Test class for the ClarinRefBoxController.
  */
-@TestPropertySource(properties = {"oai.enabled = true"})
+@TestPropertySource(properties = {"oai.enabled = true", "oai.identifier.prefix = clarin-pl.eu"})
 public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest {
 
     @Autowired
@@ -151,7 +149,7 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
         String token = getAuthToken(admin.getEmail(), password);
         String handle = itemWithFS.getHandle();
         String baseUrl = configurationService.getProperty("dspace.server.url") +
-                "/api/core/refbox/citations?handle=/" + Utils.getCanonicalHandleUrlNoProtocol(itemWithFS);
+                "/api/core/refbox/citations?handle=" + itemWithFS.getHandle();
         String bibtexUrl = baseUrl + "&type=bibtex";
         String cmdiUrl = baseUrl + "&type=cmdi";
 
@@ -186,7 +184,7 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
         String token = getAuthToken(admin.getEmail(), password);
         String handle = item.getHandle();
         String baseUrl = configurationService.getProperty("dspace.server.url") +
-                "/api/core/refbox/citations?handle=/" + Utils.getCanonicalHandleUrlNoProtocol(item);
+                "/api/core/refbox/citations?handle=" + item.getHandle();
         String bibtexUrl = baseUrl + "&type=bibtex";
         String cmdiUrl = baseUrl + "&type=cmdi";
 
@@ -419,25 +417,26 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
         // Verifies the /citations endpoint does not return a 500 for a valid handle + cmdi type
         // (regression test for #1366) and that the response is a valid OaiMetadataWrapper.
         // Content-Type must be application/json (catches reintroduction of the XML preset bug).
-        // $.metadata must be non-empty (the CMDI crosswalk always produces XML content).
+        // $.metadata must contain a CMDI document, not an OAI error response.
         getClient().perform(get("/api/core/refbox/citations")
                         .param("type", "cmdi")
                         .param("handle", item.getHandle()))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.metadata", not(emptyOrNullString())));
+                .andExpect(jsonPath("$.metadata", containsString("<cmd:CMD")));
     }
 
     @Test
     public void testCitationsEndpointWithUrlBuiltHandle() throws Exception {
         // Reproduces the exact URL format that buildExportFormats() produces, where
         // the handle is the canonical URL path (e.g. "/hdl.handle.net/123456789/xxx").
-        // The endpoint must not return 500 for this input.
+        // The endpoint must return BibTeX for this legacy link format, not an OAI error.
         String handle = "/" + Utils.getCanonicalHandleUrlNoProtocol(item);
         getClient().perform(get("/api/core/refbox/citations")
                         .param("type", "bibtex")
                         .param("handle", handle))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metadata", containsString("@misc{")));
     }
 
     @Test

@@ -375,7 +375,7 @@ public class ItemUtils {
 
         other.getField().add(createValue("handle", item.getHandle()));
         other.getField().add(createValue("identifier", DSpaceItem.buildIdentifier(item.getHandle())));
-        other.getField().add(createValue("lastModifyDate", item.getLastModified().toString()));
+        other.getField().add(createValue("lastModifyDate", Utils.formatISO8601Date(item.getLastModified())));
 
         if (restricted.get()) {
             other.getField().add(createValue("restrictedAccess", "true"));

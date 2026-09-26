@@ -3,7 +3,7 @@
     maxListSetsSize="100" stylesheet="static/style.xsl" xmlns="http://www.lyncode.com/XOAIConfiguration">
 
     <Contexts>
-        <Context baseurl="request" name="Default Context">
+        <Context baseurl="request" name="CLARIN-PL OAI-PMH (supported public metadata formats)">
             <!-- Restrict access to hidden items by default -->
             <Filter ref="defaultFilter"/>
 
@@ -12,10 +12,7 @@
             <Format ref="cmdi" />
             <Format ref="oai_metasharev2" />
             <Format ref="olac" />
-            <Format ref="xoai"/>
             <Format ref="didl"/>
-            <Format ref="dim"/>
-            <Format ref="ore"/>
             <Format ref="rdf"/>
             <Format ref="etdms"/>
             <Format ref="mods"/>
@@ -60,7 +57,7 @@
 
             - Predefined DSpace fields don't allow to set this up with a default.
          -->
-        <Context baseurl="openaire" name="OpenAIRE Context">
+        <Context baseurl="openaire" name="OpenAIRE 3 legacy context (literature only)">
             <!-- Date format, field prefixes, etc are ensured by the transformer -->
             <Transformer ref="openaireTransformer"/>
             <!-- OpenAIRE filter -->
@@ -71,7 +68,7 @@
             <Format ref="oaidc"/>
             <Format ref="mets"/>
             <Description>
-                This contexts complies with OpenAIRE Guidelines for Literature Repositories v3.0.
+                Legacy endpoint for OpenAIRE Guidelines for Literature Repositories v3.0. It intentionally exposes only qualifying literature records. Use the OpenAIRE 4 context for current harvesting or the CLARIN-PL default context for language resources.
             </Description>
         </Context>
 
@@ -84,7 +81,7 @@
 
             - Predefined DSpace fields don't allow to set this up with a default.
          -->
-        <Context baseurl="openaire4" name="OpenAIRE 4 Context">
+        <Context baseurl="openaire4" name="OpenAIRE 4 context">
             <!-- Date format, field prefixes, etc are ensured by the transformer -->
             <Transformer ref="openaire4Transformer"/>
             <!-- OpenAIRE filter -->
@@ -114,7 +111,7 @@
             <Prefix>oai_dc</Prefix>
             <XSLT>metadataFormats/oai_dc.xsl</XSLT>
             <Namespace>http://www.openarchives.org/OAI/2.0/oai_dc/</Namespace>
-            <SchemaLocation>http://www.openarchives.org/OAI/2.0/oai_dc.xsd</SchemaLocation>
+            <SchemaLocation>https://www.openarchives.org/OAI/2.0/oai_dc.xsd</SchemaLocation>
         </Format>
         <Format id="mets">
             <Prefix>mets</Prefix>
@@ -133,7 +130,7 @@
             <Prefix>didl</Prefix>
             <XSLT>metadataFormats/didl.xsl</XSLT>
             <Namespace>urn:mpeg:mpeg21:2002:02-DIDL-NS</Namespace>
-            <SchemaLocation>http://standards.iso.org/ittf/PubliclyAvailableStandards/MPEG-21_schema_files/did/didl.xsd
+            <SchemaLocation>https://standards.iso.org/ittf/PubliclyAvailableStandards/MPEG-21_schema_files/did/didl.xsd
             </SchemaLocation>
         </Format>
         <Format id="dim">
@@ -152,7 +149,7 @@
             <Prefix>rdf</Prefix>
             <XSLT>metadataFormats/rdf.xsl</XSLT>
             <Namespace>http://www.openarchives.org/OAI/2.0/rdf/</Namespace>
-            <SchemaLocation>http://www.openarchives.org/OAI/2.0/rdf.xsd</SchemaLocation>
+            <SchemaLocation>https://www.openarchives.org/OAI/2.0/rdf.xsd</SchemaLocation>
         </Format>
         <Format id="etdms">
             <Prefix>etdms</Prefix>
@@ -170,7 +167,7 @@
             <Prefix>qdc</Prefix>
             <XSLT>metadataFormats/qdc.xsl</XSLT>
             <Namespace>http://purl.org/dc/terms/</Namespace>
-            <SchemaLocation>http://dublincore.org/schemas/xmls/qdc/2006/01/06/dcterms.xsd</SchemaLocation>
+            <SchemaLocation>https://www.dublincore.org/schemas/xmls/qdc/2006/01/06/dcterms.xsd</SchemaLocation>
         </Format>
         <Format id="marc">
             <Prefix>marc</Prefix>
@@ -204,7 +201,7 @@
 		    <Prefix>bibtex</Prefix>
 		    <XSLT>metadataFormats/bibtex.xsl</XSLT>
 		    <Namespace>http://lindat.mff.cuni.cz/ns/experimental/bibtex</Namespace>
-		    <SchemaLocation>http://lindat.mff.cuni.cz/schemas/experimental/bibtex.xsd</SchemaLocation>
+		    <SchemaLocation>https://lindat.mff.cuni.cz/schemas/experimental/bibtex.xsd</SchemaLocation>
         </Format>
         <Format id="oai_metasharev2">
             <Prefix>oai_metasharev2</Prefix>
@@ -216,14 +213,14 @@
             <Prefix>cmdi</Prefix>
             <XSLT>metadataFormats/lindat_cmdi.xsl</XSLT>
             <Namespace>http://www.clarin.eu/cmd/</Namespace>
-            <SchemaLocation>http://catalog.clarin.eu/ds/ComponentRegistry/rest/registry/profiles/clarin.eu:cr1:p_1349361150622/xsd</SchemaLocation>
+            <SchemaLocation>https://catalog.clarin.eu/ds/ComponentRegistry/rest/registry/1.1/profiles/clarin.eu:cr1:p_1349361150622/xsd</SchemaLocation>
             <Filter ref="ExcludeItemsInComOrCol"/>
         </Format>
         <Format id="olac">
             <Prefix>olac</Prefix>
             <XSLT>metadataFormats/olac.xsl</XSLT>
-            <Namespace>http://www.language-archives.org/OLAC/1.1/olac.xsd</Namespace>
-            <SchemaLocation>http://www.language-archives.org/OLAC/1.1/</SchemaLocation>
+            <Namespace>http://www.language-archives.org/OLAC/1.1/</Namespace>
+            <SchemaLocation>https://www.language-archives.org/OLAC/1.1/olac.xsd</SchemaLocation>
         </Format>
         <Format id="oai_datacite">
             <Prefix>oai_datacite</Prefix>
@@ -235,7 +232,7 @@
         <Prefix>elg</Prefix>
         <XSLT>metadataFormats/elg.xsl</XSLT>
         <Namespace>http://w3id.org/meta-share/meta-share/</Namespace>
-        <SchemaLocation>http://w3id.org/meta-share/meta-share/ ../Schema/ELG-SHARE.xsd</SchemaLocation>
+        <SchemaLocation>https://live.european-language-grid.eu/metadata-schema/ELG-SHARE.xsd</SchemaLocation>
         <Filter ref="elgFilter"/>
     </Format>
     </Formats>

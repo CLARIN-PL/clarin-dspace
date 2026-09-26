@@ -184,12 +184,21 @@ public class CmdiDownloadLinkIT extends AbstractControllerIntegrationTest {
                 response.contains("?sequence="));
         assertFalse("The LICENSE bundle bitstream must not be listed as a CMDI resource",
                 response.contains(Constants.LICENSE_BITSTREAM_NAME));
+        assertFalse("CMDI self links must not depend on the legacy Handle @format extension",
+                response.contains("@format=cmdi"));
+
+        String serverUrl = configurationService.getProperty("dspace.server.url");
+        String creationDate = extractCmdiElementText(response, "MdCreationDate");
+        assertTrue("MdCreationDate must use the xs:date lexical form, but was: " + creationDate,
+                creationDate.matches("\\d{4}-\\d{2}-\\d{2}"));
+        assertEquals("MdSelfLink must resolve directly to the standalone CMDI endpoint",
+                serverUrl + "/cmdi/oai-metadata?metadataPrefix=cmdi&handle=" + item.getHandle(),
+                extractCmdiElementText(response, "MdSelfLink"));
 
         List<String> resourceRefs = extractResourceProxyRefs(response);
         assertEquals("Exactly one bitstream ResourceRef is expected (ORIGINAL bundle only)",
                 1, resourceRefs.size());
 
-        String serverUrl = configurationService.getProperty("dspace.server.url");
         String expectedRef = serverUrl + "/api/core/bitstreams/handle/" + item.getHandle() + "/test%20file.txt";
         assertEquals(expectedRef, resourceRefs.get(0));
 
@@ -253,5 +262,20 @@ public class CmdiDownloadLinkIT extends AbstractControllerIntegrationTest {
             refs.add(refNodes.item(i).getTextContent().trim());
         }
         return refs;
+    }
+
+    private String extractCmdiElementText(String xml, String localName) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
+
+        XPath xPath = XPathFactory.newInstance().newXPath();
+        NodeList nodes = (NodeList) xPath.evaluate(
+                "//*[namespace-uri()='http://www.clarin.eu/cmd/' and local-name()='" + localName + "']",
+                document, XPathConstants.NODESET);
+        assertEquals("Expected exactly one CMDI " + localName + " element", 1, nodes.getLength());
+        return nodes.item(0).getTextContent().trim();
     }
 }

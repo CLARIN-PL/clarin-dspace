@@ -244,7 +244,8 @@ public class ClarinRefBoxController {
                 parameterMap.put("metadataPrefix", lcMP);
             }
             if (!parameterMap.containsKey("identifier")) {
-                parameterMap.put("identifier", asList("oai:" + request.getServerName() + ":" + handle));
+                parameterMap.put("identifier", asList("oai:" +
+                        configurationService.getProperty("oai.identifier.prefix") + ":" + normalizeHandle(handle)));
                 parameterMap.remove("handle");
             }
 
@@ -418,6 +419,17 @@ public class ClarinRefBoxController {
         return authorText;
     }
 
+    /** Accept handles from current links as well as older canonical-URL export links. */
+    private String normalizeHandle(String handle) {
+        String canonicalPrefix = configurationService.getProperty("handle.canonical.prefix");
+        if (StringUtils.isBlank(canonicalPrefix)) {
+            return handle;
+        }
+
+        String prefixWithoutScheme = canonicalPrefix.replaceFirst("^https?://", "");
+        return handle.replaceFirst("^(?:https?://|/)?" + Pattern.quote(prefixWithoutScheme), "");
+    }
+
     /**
      * Build the export formats for the RefBox based on the Item handle.
      * It returns a list of ExportFormatDTO objects with the URL to the citation data.
@@ -427,7 +439,7 @@ public class ClarinRefBoxController {
         String itemHandle = item.getHandle();
         if (itemHandle != null) {
             String baseUrl = configurationService.getProperty("dspace.server.url") +
-                    "/api/core/refbox/citations?handle=/" + Utils.getCanonicalHandleUrlNoProtocol(item);
+                    "/api/core/refbox/citations?handle=" + itemHandle;
 
             String bibtexUrl = baseUrl + "&type=bibtex";
             String cmdiUrl = baseUrl + "&type=cmdi";

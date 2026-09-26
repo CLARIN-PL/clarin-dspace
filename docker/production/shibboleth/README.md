@@ -26,7 +26,8 @@ For HTTPS production deployments set:
 
 - `SHIBBOLETH_HANDLER_SSL=true`
 - `SHIBBOLETH_COOKIE_PROPS=; path=/; HttpOnly; secure; SameSite=None`
-- `SHIBBOLETH_SERVER_NAME` to the public host (and port only when nonstandard)
+- `SHIBBOLETH_SERVER_NAME` to the public host and its external HTTPS port
+  (`clarin-pl.eu:443` when TLS terminates at an upstream reverse proxy)
 
 The local HTTP profile uses `handlerSSL=false` and a non-Secure cookie so the
 redirect chain can be inspected, but an institutional login can only complete

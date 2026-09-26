@@ -19,6 +19,14 @@
 	<xsl:output method="html" doctype-public="-//W3C//DTD HTML 4.01//EN" doctype-system="http://www.w3.org/TR/html4/strict.dtd" />
 
 	<xsl:template match="/">
+		<xsl:variable name="request-url" select="/oai:OAI-PMH/oai:request/text()" />
+		<xsl:variable name="record-prefix">
+			<xsl:choose>
+				<xsl:when test="contains($request-url, '/openaire4')">oai_openaire</xsl:when>
+				<xsl:when test="contains($request-url, '/openaire_data')">oai_datacite</xsl:when>
+				<xsl:otherwise>oai_dc</xsl:otherwise>
+			</xsl:choose>
+		</xsl:variable>
 		<html>
 			<head>
                 <title>DSpace OAI-PMH Data Provider</title>
@@ -26,9 +34,9 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
                 <!-- NOTE: We use JQuery and Bootstrap via WebJars which are configured in dspace-server-webapp -->
-                <script src="../webjars/jquery/dist/jquery.min.js" type="text/javascript"></script>
-                <script src="../webjars/bootstrap/dist/js/bootstrap.min.js" type="text/javascript"></script>
-                <link rel="stylesheet" href="../webjars/bootstrap/dist/css/bootstrap.min.css" type="text/css"/>
+                <script src="/oai/webjars/jquery/dist/jquery.min.js" type="text/javascript"></script>
+                <script src="/oai/webjars/bootstrap/dist/js/bootstrap.min.js" type="text/javascript"></script>
+                <link rel="stylesheet" href="/oai/webjars/bootstrap/dist/css/bootstrap.min.css" type="text/css"/>
                 <link rel="stylesheet" href="static/css/style.css" type="text/css" />
 			</head>
 			<body>
@@ -71,7 +79,7 @@
                                         </xsl:if>
                                         <xsl:attribute name="href">
                                             <xsl:value-of
-                                                    select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListRecords&amp;metadataPrefix=oai_dc')"></xsl:value-of>
+                                                    select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListRecords&amp;metadataPrefix=', normalize-space($record-prefix))"></xsl:value-of>
                                         </xsl:attribute>
                                         Records
                                     </a>
@@ -83,7 +91,7 @@
                                         </xsl:if>
                                         <xsl:attribute name="href">
                                             <xsl:value-of
-                                                    select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListIdentifiers&amp;metadataPrefix=oai_dc')"></xsl:value-of>
+                                                    select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListIdentifiers&amp;metadataPrefix=', normalize-space($record-prefix))"></xsl:value-of>
                                         </xsl:attribute>
                                         Identifiers
                                     </a>
@@ -104,6 +112,16 @@
                             </ul>
                         </div><!--/.nav-collapse -->
                     </nav>
+                    <xsl:if test="contains($request-url, '/openaire') and not(contains($request-url, '/openaire4')) and not(contains($request-url, '/openaire_data'))">
+                        <div class="alert alert-warning mt-3" role="alert">
+                            <strong>Legacy OpenAIRE 3 endpoint.</strong>
+                            This context contains literature records meeting the old OpenAIRE 3 filters only.
+                            For current OpenAIRE harvesting use
+                            <a href="/oai/openaire4?verb=ListMetadataFormats">OpenAIRE 4</a>;
+                            for all CLARIN-PL resources and metadata formats use the
+                            <a href="/oai/request?verb=ListMetadataFormats">default OAI-PMH endpoint</a>.
+                        </div>
+                    </xsl:if>
                     <div class="row">
                         <div class="offset-lg-1 col-lg-10">
                             <div class="row my-2">
@@ -139,9 +157,18 @@
     <xsl:template match="oai:OAI-PMH/oai:error">
         <div class="alert alert-danger w-100" role="alert">
             <h4>Error</h4>
-            <p>
-                <xsl:value-of select="text()"></xsl:value-of>
-            </p>
+            <xsl:choose>
+                <xsl:when test="@code = 'noRecordsMatch' and contains(/oai:OAI-PMH/oai:request/text(), '/openaire') and not(contains(/oai:OAI-PMH/oai:request/text(), '/openaire4')) and not(contains(/oai:OAI-PMH/oai:request/text(), '/openaire_data'))">
+                    <p>No records in this selection meet the legacy OpenAIRE 3 literature filter.</p>
+                    <p class="mb-0">
+                        Try <a href="/oai/openaire4?verb=ListRecords&amp;metadataPrefix=oai_openaire">OpenAIRE 4 records</a>
+                        or <a href="/oai/request?verb=ListRecords&amp;metadataPrefix=oai_dc">all CLARIN-PL records</a>.
+                    </p>
+                </xsl:when>
+                <xsl:otherwise>
+                    <p><xsl:value-of select="text()"></xsl:value-of></p>
+                </xsl:otherwise>
+            </xsl:choose>
         </div>
     </xsl:template>
 
@@ -215,6 +242,13 @@
     </xsl:template>
 
     <xsl:template match="oai:OAI-PMH/oai:ListSets">
+        <xsl:variable name="record-prefix">
+            <xsl:choose>
+                <xsl:when test="contains(/oai:OAI-PMH/oai:request/text(), '/openaire4')">oai_openaire</xsl:when>
+                <xsl:when test="contains(/oai:OAI-PMH/oai:request/text(), '/openaire_data')">oai_datacite</xsl:when>
+                <xsl:otherwise>oai_dc</xsl:otherwise>
+            </xsl:choose>
+        </xsl:variable>
         <h2>List of Sets</h2>
         <hr class="w-100"/>
         <div class="card card-body bg-light py-2 my-2 w-100">
@@ -247,14 +281,14 @@
                         <a role="button" class="btn btn-outline-secondary">
                             <xsl:attribute name="href">
                                 <xsl:value-of
-                                        select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListRecords&amp;metadataPrefix=oai_dc&amp;set=', oai:setSpec/text())" />
+                                        select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListRecords&amp;metadataPrefix=', normalize-space($record-prefix), '&amp;set=', oai:setSpec/text())" />
                             </xsl:attribute>
                             Records
                         </a>
                         <a role="button" class="btn btn-outline-secondary">
                             <xsl:attribute name="href">
                                 <xsl:value-of
-                                        select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListIdentifiers&amp;metadataPrefix=oai_dc&amp;set=', oai:setSpec/text())" />
+                                        select="concat(/oai:OAI-PMH/oai:request/text(), '?verb=ListIdentifiers&amp;metadataPrefix=', normalize-space($record-prefix), '&amp;set=', oai:setSpec/text())" />
                             </xsl:attribute>
                             Identifiers
                         </a>
