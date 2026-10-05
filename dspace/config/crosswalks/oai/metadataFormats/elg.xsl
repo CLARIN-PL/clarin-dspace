@@ -93,7 +93,7 @@
             </ms:metadataLastDateUpdated>
             <ms:compliesWith>http://w3id.org/meta-share/meta-share/ELG-SHARE</ms:compliesWith>
             <ms:sourceOfMetadataRecord>
-                <ms:repositoryName xml:lang="en">LINDAT/CLARIAH-CZ</ms:repositoryName>
+                <ms:repositoryName xml:lang="en">CLARIN-PL</ms:repositoryName>
             </ms:sourceOfMetadataRecord>
             <ms:sourceMetadataRecord>
                 <ms:MetadataRecordIdentifier>
@@ -140,7 +140,10 @@
 
     <xsl:template name="keyword">
         <xsl:for-each select="doc:metadata/doc:element[@name='dc']/doc:element[@name='subject']/doc:element/doc:field[@name='value']">
-            <ms:keyword xml:lang='en'><xsl:value-of select="."/></ms:keyword>
+            <xsl:variable name="normalizedKeyword" select="translate(normalize-space(.), $UPPER_CHARS, $LOWER_CHARS)"/>
+            <xsl:if test="$normalizedKeyword != '' and not(preceding::doc:field[@name='value'][parent::doc:element[parent::doc:element[@name='subject']]][translate(normalize-space(.), $UPPER_CHARS, $LOWER_CHARS) = $normalizedKeyword])">
+                <ms:keyword xml:lang="en"><xsl:value-of select="normalize-space(.)"/></ms:keyword>
+            </xsl:if>
         </xsl:for-each>
     </xsl:template>
 
