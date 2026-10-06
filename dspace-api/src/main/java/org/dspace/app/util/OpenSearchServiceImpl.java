@@ -187,7 +187,9 @@ public class OpenSearchServiceImpl implements OpenSearchService {
         osq.setRole("request");
         try {
             if (StringUtils.isNotBlank(query)) {
-                osq.setSearchTerms(URLEncoder.encode(query, "UTF-8"));
+                // URLEncoder intentionally leaves '*' unchanged, but OpenSearch
+                // searchTerms must be URL-encoded even for a wildcard query.
+                osq.setSearchTerms(URLEncoder.encode(query, "UTF-8").replace("*", "%2A"));
             }
         } catch (UnsupportedEncodingException e) {
             log.error(e);

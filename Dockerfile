@@ -88,7 +88,7 @@ RUN chmod u+x redebug.sh undebug.sh custom_run.sh /usr/local/bin/dspace-producti
 ARG DSPACE_UID=1100
 ARG DSPACE_GID=1100
 ENV HOME=/home/dspace
-RUN mkdir -p ${HOME} /dspace/assetstore /dspace/upload \
+RUN mkdir -p ${HOME} /dspace/assetstore /dspace/upload /dspace/sitemaps \
     && chown -Rv ${DSPACE_UID}:${DSPACE_GID} ${HOME} /dspace /usr/local/tomcat
 # NOTE: /dspace/assetstore does not exist in the base image.
 # We create it so Docker named volumes inherit the correct ownership.
