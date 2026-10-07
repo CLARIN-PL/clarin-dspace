@@ -7,6 +7,7 @@
  */
 package org.dspace.app.opensearch;
 
+import static org.junit.Assert.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +52,8 @@ public class OpenSearchControllerIT extends AbstractControllerIntegrationTest {
                    .andExpect(status().isOk())
                    //We expect the content type to be "application/atom+xml;charset=UTF-8"
                    .andExpect(content().contentType("application/atom+xml;charset=UTF-8"))
+                   .andExpect(result -> assertEquals(result.getResponse().getContentAsByteArray().length,
+                                                     result.getResponse().getContentLength()))
         ;
     }
 
@@ -66,6 +69,9 @@ public class OpenSearchControllerIT extends AbstractControllerIntegrationTest {
                    .andExpect(status().isOk())
                    //We expect the content type to be "application/rss+xml;charset=UTF-8"
                    .andExpect(content().contentType("application/rss+xml;charset=UTF-8"))
+                   .andExpect(result -> assertEquals(result.getResponse().getContentAsByteArray().length,
+                                                     result.getResponse().getContentLength()))
+                   .andExpect(xpath("rss/channel/title").exists())
         ;
     }
 

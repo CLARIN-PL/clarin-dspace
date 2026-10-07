@@ -7,7 +7,9 @@
  */
 package org.dspace.app.rest;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.Map;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -206,9 +209,12 @@ public class OpenSearchController {
                 qResults.getMaxResults(), container, dsoResults, labelMap);
             try {
                 Transformer xf = TransformerFactory.newInstance().newTransformer();
+                xf.setOutputProperty(OutputKeys.ENCODING, StandardCharsets.UTF_8.name());
+                ByteArrayOutputStream body = new ByteArrayOutputStream();
+                xf.transform(new DOMSource(resultsDoc), new StreamResult(body));
                 response.setContentType(openSearchService.getContentType(format));
-                xf.transform(new DOMSource(resultsDoc),
-                    new StreamResult(response.getWriter()));
+                response.setContentLength(body.size());
+                body.writeTo(response.getOutputStream());
             } catch (TransformerException e) {
                 log.error(e);
                 throw new ServletException(e.toString());
