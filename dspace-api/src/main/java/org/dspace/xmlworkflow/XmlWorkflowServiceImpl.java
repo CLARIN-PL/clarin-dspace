@@ -259,20 +259,47 @@ public class XmlWorkflowServiceImpl implements XmlWorkflowService {
             // suppress email, and delete key
             noEMail.remove(wfi.getItem().getID());
         } else {
-            Email mail = Email.getEmail(I18nUtil.getEmailFilename(c.getCurrentLocale(), emailTemplate));
-            for (String argument : arguments) {
-                mail.addArgument(argument);
-            }
-            for (EPerson anEpa : epa) {
-                String email = anEpa.getEmail();
-                if (email != null && email.contains(";")) {
-                    email = email.split(";")[0].trim();
-                }
-                mail.addRecipient(email);
-            }
-
-            mail.send();
+            sendTaskNotifications(c, emailTemplate, epa, arguments);
         }
+    }
+
+    /** An invalid recipient must not prevent delivery to the rest of the team. */
+    protected void sendTaskNotifications(Context context, String template, List<EPerson> recipients,
+                                         String... arguments) throws IOException, MessagingException {
+        MessagingException failure = null;
+        java.util.Set<String> addresses = new java.util.LinkedHashSet<>();
+        for (EPerson recipient : recipients) {
+            String address = recipient.getEmail();
+            if (address != null && !address.isBlank()) {
+                address = address.split(";", -1)[0].trim();
+                // Bootstrap administrator accounts have no deliverable mailbox.
+                if (!address.isEmpty() && !address.toLowerCase(java.util.Locale.ROOT).endsWith("@localhost")) {
+                    addresses.add(address);
+                }
+            }
+        }
+        for (String address : addresses) {
+            try {
+                sendTaskNotification(context, template, address, arguments);
+            } catch (MessagingException exception) {
+                if (failure == null) {
+                    failure = exception;
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    protected void sendTaskNotification(Context context, String template, String address,
+                                        String... arguments) throws IOException, MessagingException {
+        Email mail = Email.getEmail(I18nUtil.getEmailFilename(context.getCurrentLocale(), template));
+        for (String argument : arguments) {
+            mail.addArgument(argument);
+        }
+        mail.addRecipient(address);
+        mail.send();
     }
 
     protected void grantSubmitterReadPolicies(Context context, Item item) throws SQLException, AuthorizeException {
