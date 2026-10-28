@@ -68,7 +68,37 @@ public class ClaimAction extends UserSelectionAction {
         // accept task, or accepting multiple tasks
         XmlWorkflowServiceFactory.getInstance().getWorkflowRequirementsService().addClaimedUser(c, wfi, step,
                 c.getCurrentUser());
+        if (configurationService.getBooleanProperty("workflow.notify.claimed.tasks", false)) {
+            alertUsersOnClaim(c, wfi, step);
+        }
         return new ActionResult(ActionResult.TYPE.TYPE_OUTCOME, ActionResult.OUTCOME_COMPLETE);
+    }
+
+    /** Inform the editorial team who took responsibility for a pooled task. */
+    protected void alertUsersOnClaim(Context context, XmlWorkflowItem workflowItem, Step step)
+            throws SQLException {
+        RoleMembers members = step.getRole().getMembers(context, workflowItem);
+        if (members == null || context.getCurrentUser() == null) {
+            return;
+        }
+        List<EPerson> recipients = members.getAllUniqueMembers(context);
+        if (recipients.isEmpty()) {
+            return;
+        }
+        try {
+            XmlWorkflowService workflow = getNotificationService();
+            workflow.alertUsersOnTaskActivation(context, workflowItem, "task_claimed", recipients,
+                    workflowItem.getItem().getName(), workflowItem.getCollection().getName(),
+                    context.getCurrentUser().getFullName(), workflow.getMyDSpaceLink());
+        } catch (IOException | MessagingException exception) {
+            // A mail outage must not undo the user's claim.
+            log.error(LogHelper.getHeader(context, "error emailing task claim",
+                    "workflowitem: " + workflowItem.getID()), exception);
+        }
+    }
+
+    protected XmlWorkflowService getNotificationService() {
+        return XmlWorkflowServiceFactory.getInstance().getXmlWorkflowService();
     }
 
     @Override

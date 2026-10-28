@@ -1,0 +1,12 @@
+## Arguments: 0 submission title, 1 collection, 2 editor, 3 My DSpace URL
+#set($subject = "${config.get('dspace.shortname')}: Task claimed / Zadanie podjęte")
+
+An editorial task has been claimed.
+Zadanie redakcyjne zostało podjęte.
+
+Resource / Zasób: ${params[0]}
+Collection / Kolekcja: ${params[1]}
+Editor / Redaktor: ${params[2]}
+
+Review your tasks / Sprawdź swoje zadania:
+${params[3]}
