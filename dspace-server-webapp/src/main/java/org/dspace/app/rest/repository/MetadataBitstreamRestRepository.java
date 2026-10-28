@@ -95,6 +95,9 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         Item item = (Item) dso;
         List<String> fileGrpTypes = (fileGrpType == null ? List.of() : Arrays.asList(fileGrpType.split(",")));
         List<Bundle> bundles = findEnabledBundles(fileGrpTypes, item);
+        long total = 0;
+        long offset = pageable.isPaged() ? pageable.getOffset() : 0;
+        long limit = pageable.isPaged() ? pageable.getPageSize() : Long.MAX_VALUE;
         for (Bundle bundle : bundles) {
             List<Bitstream> bitstreams = new ArrayList<>(bundle.getBitstreams());
             String use = bundle.getName();
@@ -107,6 +110,12 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
             }
 
             for (Bitstream bitstream : bitstreams) {
+                // Count every file, but generate previews and REST models only for this page.
+                // Large corpora can contain thousands of files.
+                long index = total++;
+                if (index < offset || index - offset >= limit) {
+                    continue;
+                }
                 String url = previewContentService.composePreviewURL(context, item, bitstream, contextPath);
                 List<FileInfo> fileInfos = new ArrayList<>();
                 boolean canPreview = previewContentService.canPreview(context, bitstream, true);
@@ -160,7 +169,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
             context.commit();
         }
 
-        return new PageImpl<>(rs, pageable, rs.size());
+        return new PageImpl<>(rs, pageable, total);
     }
 
     /**
